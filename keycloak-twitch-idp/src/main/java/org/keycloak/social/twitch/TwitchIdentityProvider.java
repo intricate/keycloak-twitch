@@ -349,6 +349,10 @@ public class TwitchIdentityProvider extends OIDCIdentityProvider
      * "a list of space-delimited, case-sensitive strings". However, in
      * Twitch's OAuth 2.0 Access Token response, the scope parameter is
      * expressed as a JSON array of strings.
+     * <p>
+     * Note that if the scope parameter is already formatted according to the
+     * OAuth 2.0 specification, this method just returns the access token
+     * response as is.
      *
      * @param response OAuth 2.0 access token response formatted according to
      *                 <a href="https://dev.twitch.tv/docs/authentication/getting-tokens-oauth">
@@ -368,14 +372,26 @@ public class TwitchIdentityProvider extends OIDCIdentityProvider
         );
 
         Object scopeObj = accessTokenResponseMap.get("scope");
-        if (!(scopeObj instanceof List<?>)) {
+        if (scopeObj instanceof List<?>) {
+            String scope = ((List<?>) scopeObj).stream()
+                .map(Object::toString)
+                .collect(Collectors.joining(" "));
+
+            accessTokenResponseMap.put("scope", scope);
+            return objectMapper.writeValueAsString(accessTokenResponseMap);
+        } else if (scopeObj instanceof String) {
+            /*
+             * The scope is already expressed as a string. This may be an
+             * access token response that we've already stored in the
+             * database after converting it in the past.
+             *
+             * We'll just assume that it's already formatted according to the
+             * OAuth 2.0 specification and return the access token response as
+             * it is.
+             */
+            return objectMapper.writeValueAsString(accessTokenResponseMap);
+        } else {
             throw new InvalidTwitchAccessTokenResponseScopeException();
         }
-        String scope = ((List<?>) scopeObj).stream()
-            .map(Object::toString)
-            .collect(Collectors.joining(" "));
-
-        accessTokenResponseMap.put("scope", scope);
-        return objectMapper.writeValueAsString(accessTokenResponseMap);
     }
 }
